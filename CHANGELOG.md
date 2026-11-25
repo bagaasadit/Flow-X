@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.5.0-s4] - 2026-11-25
+### Added
+- **Stage 4 (Adreno 618 GPU Overclock + DDR 2133 MHz Unlock):**
+  - **Adreno 618 `800 / 825 MHz` (`arch/arm64/boot/dts/qcom/atoll.dtsi`):** Unlocked `825 MHz` (`TURBO_L1`, RPMh ARC `gfx.lvl = 416` verified via `flowx_arc`) and `800 MHz` (`TURBO`, `gfx.lvl = 384`) in `qcom,gpu-pwrlevels-5` (`speed-bin 159`), while retaining the stock `750 MHz` step for smooth thermal/devfreq step-down and single-boot `750 / 800 / 825 MHz` A/B/C testing. Updated `qcom,initial-pwrlevel = <7>` (`267 MHz`) and `qcom,ca-target-pwrlevel = <6>` (`355 MHz`) for the 9-level table (`8 active + XO <= pri_rail->num = 9`), keeping `atoll-thermal.dtsi` relative cooling floor indices (`650 / 565 / 430 MHz`) intact.
+  - **DDR `2133 MHz` (`bus-max=12`, `8137 MiB/s`) Unlock:** Raised `qcom,bus-freq = <12>` and `qcom,bus-max = <12>` on `825 / 800 / 750 MHz` levels (and `bus-max = <12>` on `650 MHz`), lifting the stock `1804 MHz` (`6881 MiB/s`) GPU memory bandwidth ceiling.
+- Bumped `CONFIG_LOCALVERSION` to `-Flow-X-v0.5.0-s4`.
+
 ## [v0.4.0-s3] - 2026-11-25
 ### Added
 - **Stage 3 (Brutal MM & True Hot-Resume Track):**
