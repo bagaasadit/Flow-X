@@ -645,6 +645,14 @@ static int rpmh_arc_cmds(struct gmu_device *gmu,
 			break;
 	}
 
+	{
+		unsigned int idx;
+
+		for (idx = 0; idx < arc->num; idx++)
+			dev_info(&gmu->pdev->dev, "flowx_arc %s[%u]=%u\n",
+				 res_id, idx, arc->val[idx]);
+	}
+
 	return 0;
 }
 

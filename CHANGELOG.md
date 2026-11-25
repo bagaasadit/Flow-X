@@ -1,5 +1,22 @@
 # Changelog
 
+## [v0.2.0-s1] - 2026-11-25
+### Added
+- **Stage 1 (Arch & Stripping):**
+  - Enabled hardware ARMv8.1/8.2 LSE atomic instructions (`CONFIG_ARM64_LSE_ATOMICS=y`) with `CFLAGS_atomic_ll_sc.o += $(DISABLE_LTO)` for safe ThinLTO out-of-line `__ll_sc_*` ABI handling.
+  - Added read-only `flowx_arc` boot probe in `drivers/gpu/msm/kgsl_gmu.c` (`rpmh_arc_cmds`) to inspect exact `gfx.lvl`, `cx.lvl`, and `mx.lvl` RPMh cmd-db VLVL corners in `dmesg`.
+  - Added Flow X Stage 1 config guardrails in `.github/workflows/build-kernel.yml`.
+
+### Changed
+- Stripped hot-path syscall/allocator/debug overhead for maximal experimental throughput while preserving `CONFIG_AUDIT=y` (SELinux AVC), `CONFIG_FTRACE=y`, and `CONFIG_BPF_EVENTS=y`:
+  - `# CONFIG_AUDITSYSCALL is not set`
+  - `# CONFIG_HARDEN_BRANCH_PREDICTOR is not set` (also disables Spectre BHB mitigation)
+  - `# CONFIG_SLAB_FREELIST_RANDOM is not set` & `# CONFIG_SLAB_FREELIST_HARDENED is not set`
+  - `# CONFIG_HARDENED_USERCOPY is not set`
+  - `# CONFIG_BUG_ON_DATA_CORRUPTION is not set` & `# CONFIG_DEBUG_LIST is not set`
+  - `# CONFIG_DEBUG_KERNEL is not set`
+- Bumped `CONFIG_LOCALVERSION` to `-Flow-X-v0.2.0-s1`.
+
 ## [v0.1.0] - 2026-11-25
 ### Added
 - Bootstrapped **Flow X** as a completely isolated repository (`bagaasadit/Flow-X`) forked from verified **Flow-Kernel v1.2.4** (`32ed9386`).

@@ -320,6 +320,29 @@ jobs:
             fi
           done
 
+          # Flow X Stage 1: verify hardware LSE atomics + hotpath stripping stay active
+          for sym in CONFIG_ARM64_LSE_ATOMICS CONFIG_AUDIT CONFIG_FTRACE CONFIG_BPF_EVENTS; do
+            if grep -qx "$sym=y" out/.config; then
+              echo "  ok   $sym=y"
+            else
+              echo "::error::$sym must stay enabled in Flow X Stage 1"
+              fail=1
+            fi
+          done
+
+          for sym in CONFIG_AUDITSYSCALL CONFIG_HARDEN_BRANCH_PREDICTOR \
+                     CONFIG_MITIGATE_SPECTRE_BRANCH_HISTORY \
+                     CONFIG_SLAB_FREELIST_HARDENED CONFIG_SLAB_FREELIST_RANDOM \
+                     CONFIG_HARDENED_USERCOPY CONFIG_DEBUG_LIST \
+                     CONFIG_BUG_ON_DATA_CORRUPTION CONFIG_DEBUG_KERNEL; do
+            if grep -qx "$sym=y" out/.config; then
+              echo "::error::$sym must stay off in Flow X Stage 1"
+              fail=1
+            else
+              echo "  ok   $sym off"
+            fi
+          done
+
           # Every inline hook site must still be wired. A dropped hook does
           # not fail to build - it fails silently at boot, which is how the
           # init.rc size hook went missing and left modules stuck in
