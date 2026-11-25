@@ -1311,10 +1311,10 @@ static isolate_migrate_t isolate_migratepages(struct zone *zone,
 }
 
 #define PROACTIVE_COMPACT_ORDER		pageblock_order
-#define COMPACT_PROACTIVE_BASE_MS	4000U
+#define COMPACT_PROACTIVE_BASE_MS	1000U
 #define COMPACT_PROACTIVE_MAX_MS	32000U
-#define PROACTIVE_MAX_MIGRATE_SCAN	4096UL
-#define PROACTIVE_MAX_FREE_SCAN		16384UL
+#define PROACTIVE_MAX_MIGRATE_SCAN	8192UL
+#define PROACTIVE_MAX_FREE_SCAN		32768UL
 
 static unsigned int fragmentation_score_zone(struct zone *zone);
 
@@ -1961,7 +1961,7 @@ void compaction_unregister_node(struct node *node)
  * movable blocks stay available under multitasking bursts without blocking
  * direct reclaim, inflating PSI memstall, or waking Deep Sleep (0 wakeups).
  */
-int sysctl_compaction_proactiveness = 30;
+int sysctl_compaction_proactiveness = 40;
 
 static unsigned int fragmentation_score_zone(struct zone *zone)
 {

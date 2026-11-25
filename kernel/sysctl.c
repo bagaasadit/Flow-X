@@ -1601,7 +1601,7 @@ static struct ctl_table kern_table[] = {
 	{ }
 };
 
-#define MAX_VM_SWAPPINESS 60
+#define MAX_VM_SWAPPINESS 200
 
 static int proc_swappiness_handler(struct ctl_table *table, int write,
 				   void __user *buffer, size_t *lenp,
@@ -1617,8 +1617,8 @@ static int proc_swappiness_handler(struct ctl_table *table, int write,
 		return proc_dointvec_minmax(table, write, buffer, lenp, ppos);
 
 	/*
-	 * Accept vendor post-boot writes (e.g. 100) cleanly without failing,
-	 * while capping effective vm_swappiness at MAX_VM_SWAPPINESS.
+	 * Allow full 0..200 MGLRU swappiness tuning for fast LZ4 zRAM (e.g.
+	 * vendor post-boot 100) while clamping against MAX_VM_SWAPPINESS.
 	 */
 	val = READ_ONCE(vm_swappiness);
 	tmp = *table;

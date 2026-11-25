@@ -175,7 +175,7 @@ unsigned long sysctl_clean_min_kbytes __read_mostly = CONFIG_CLEAN_MIN_KBYTES;
 /*
  * From 0 .. 200.  Higher means more swappy.
  */
-int vm_swappiness = 60;
+int vm_swappiness = 100;
 
 #ifdef CONFIG_OPLUS_MM_HACKS
 /*
@@ -4285,8 +4285,8 @@ static long get_nr_to_scan(struct lruvec *lruvec, struct scan_control *sc, int s
 	return walk_mm_list(lruvec, max_seq, sc, swappiness, NULL) ? nr_to_scan : 0;
 }
 
-/* Protect the active working set for 1000ms against transient allocation bursts. */
-static unsigned long lru_gen_min_ttl_ms = 1000;
+/* Protect the active working set for 2000ms against transient allocation bursts. */
+static unsigned long lru_gen_min_ttl_ms = 2000;
 
 /* protect the working set: the oldest generations must have lived for min_ttl_ms */
 static bool lru_gen_ttl_protected(struct lruvec *lruvec, struct scan_control *sc, int swappiness)

@@ -319,12 +319,13 @@ compound_page_dtor * const compound_page_dtors[] = {
 int min_free_kbytes = 1024;
 int user_min_free_kbytes = -1;
 /*
- * Keep a ~70 MB kswapd hysteresis band even when Android userspace writes 1
- * alongside extra_free_kbytes, giving kswapd enough runway during bursty
- * allocations (camera/ZArchiver) to avoid premature lmkd low-watermark kills.
+ * Keep a ~112 MB kswapd hysteresis band even when Android userspace writes 1
+ * alongside extra_free_kbytes, giving kswapd enough async runway during bursty
+ * allocations (camera/ZArchiver) while keeping WMARK_LOW lean for lmkd.
  */
-#define MIN_WATERMARK_SCALE_FACTOR 125
-int watermark_scale_factor = MIN_WATERMARK_SCALE_FACTOR;
+#define DEFAULT_WATERMARK_SCALE_FACTOR 200
+#define VENDOR_DISABLE_WSF_THRESHOLD 10
+int watermark_scale_factor = DEFAULT_WATERMARK_SCALE_FACTOR;
 
 /*
  * Extra memory for the system to try freeing. Used to temporarily
@@ -7335,8 +7336,8 @@ static void __setup_per_zone_wmarks(void)
 		 */
 		if (low)
 			zone->watermark[WMARK_LOW] = min_wmark_pages(zone) +
-						     mult_frac(low, 6, 10) +
-						     (min >> 3);
+						     mult_frac(low, 5, 10) +
+						     (min >> 4);
 		else
 			zone->watermark[WMARK_LOW] = min_wmark_pages(zone) +
 						     (min >> 1);
@@ -7453,8 +7454,9 @@ int watermark_scale_factor_sysctl_handler(struct ctl_table *table, int write,
 		return proc_dointvec_minmax(table, write, buffer, length, ppos);
 
 	/*
-	 * Accept 1..1000 cleanly so vendor post-boot scripts do not fail,
-	 * while enforcing MIN_WATERMARK_SCALE_FACTOR as the effective floor.
+	 * Accept 1..1000 cleanly so vendor post-boot scripts (echo 1) do not
+	 * fail, restoring DEFAULT_WATERMARK_SCALE_FACTOR when vendor init tries
+	 * to disable wsf (<10) while permitting intentional 10..1000 tuning.
 	 */
 	val = READ_ONCE(watermark_scale_factor);
 	tmp = *table;
@@ -7463,8 +7465,8 @@ int watermark_scale_factor_sysctl_handler(struct ctl_table *table, int write,
 	if (rc)
 		return rc;
 
-	if (val < MIN_WATERMARK_SCALE_FACTOR)
-		val = MIN_WATERMARK_SCALE_FACTOR;
+	if (val < VENDOR_DISABLE_WSF_THRESHOLD)
+		val = DEFAULT_WATERMARK_SCALE_FACTOR;
 	WRITE_ONCE(watermark_scale_factor, val);
 	setup_per_zone_wmarks();
 
