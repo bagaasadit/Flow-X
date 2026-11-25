@@ -3815,10 +3815,10 @@
 			qcom,initial-pwrlevel = <5>;
 			qcom,ca-target-pwrlevel = <4>;
 
-			/* TURBO (gfx.lvl 384 == mx.lvl 384) */
+			/* TURBO (stock 750 MHz + DDR 2133 MHz bus-max=12) */
 			qcom,gpu-pwrlevel@0 {
 				reg = <0>;
-				qcom,gpu-freq = <800000000>;
+				qcom,gpu-freq = <750000000>;
 				qcom,bus-freq = <12>;
 				qcom,bus-min = <10>;
 				qcom,bus-max = <12>;

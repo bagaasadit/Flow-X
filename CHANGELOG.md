@@ -1,5 +1,17 @@
 # Changelog
 
+## [v1.0.0] - 2026-11-25
+### Added & Locked (All Verified Winners from Stages 1–4)
+- **Stage 1 (Arch & Stripping):** Hardware ARMv8.2 LSE atomics (`CONFIG_ARM64_LSE_ATOMICS=y`, ThinLTO-safe `DISABLE_LTO` on `atomic_ll_sc.o`) + hotpath overhead stripping (`AUDITSYSCALL=n`, `HARDEN_BRANCH_PREDICTOR=n`, `SLAB_FREELIST_HARDENED=n`, `SLAB_FREELIST_RANDOM=n`, `HARDENED_USERCOPY=n`, `BUG_ON_DATA_CORRUPTION=n`, `DEBUG_LIST=n`, `DEBUG_KERNEL=n`) while retaining `AUDIT=y`, `FTRACE=y`, and `BPF_EVENTS=y`.
+- **Stage 2 (Scheduler & Hardware Telemetry):** Fixed `BORE 5.1.0` scheduler (`CONFIG_SCHED_BORE=y`, 5 port fixes, runtime `0/1` toggle via `/proc/sys/kernel/sched_bore`) + persistent read-only `/sys/class/kgsl/kgsl-3d0/flowx_arc` sysfs attribute.
+- **Stage 3 (Brutal MM & True Hot-Resume):** Pure-kernel `6 GiB` LZ4 `zram0` floor (`>= 5 GiB` RAM), unlocked MGLRU `vm_swappiness = 100` (`0..200`), `lru_gen/min_ttl_ms = 2000`, `watermark_scale_factor = 200` (`~112 MiB` async `kswapd` runway with lean `~31 MiB` `WMARK_LOW`), faster budgeted proactive compaction (`base 1000ms`, `8192/32768` scan budget, `proactiveness = 40`), and `vfs_cache_pressure = 60`.
+- **Stage 4 (GPU & DDR 2133 MHz):** Locked stock-safe `750 MHz` Adreno 618 clock + unlocked **`DDR 2133 MHz` (`bus-max = 12`, `8137 MiB/s`)** on `750 / 650 MHz` (`speed-bin 159`).
+
+### Changed / Removed
+- Pruned silicon/GMU-rejected `800 / 825 MHz` GPU overclock from `qcom,gpu-pwrlevels-5` (`bin 159`) after live hardware probe confirmed GMU/GX faults at `>= 800 MHz`.
+- Removed temporary `/sys/class/kgsl/kgsl-3d0/flowx_oc_unlock` safe-boot probe gate from `drivers/gpu/msm/kgsl_pwrctrl.c` while keeping `flowx_arc` intact.
+- Synced `AnyKernel3/banner`, `AnyKernel3/anykernel.sh`, `README.md`, and `CONFIG_LOCALVERSION` to **`-Flow-X-v1.0.0`**.
+
 ## [v0.5.1-s4] - 2026-11-25
 ### Fixed / Changed
 - **Stage 4 Safe-Boot Probe (`800 MHz` `TURBO` + `DDR 2133 MHz` + Anti-Bootloop Gate):**

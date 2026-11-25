@@ -8,12 +8,15 @@
 
 ---
 
-### Peta Eksperimen (`Full Brutal` Lab)
-1. **Tahap 1 — Microarchitecture, Scheduler & Zero-Overhead**
-   * **ARMv8.2 LSE Hardware Atomics** (`CONFIG_ARM64_LSE_ATOMICS=y`) & tuning compiler Kryo 465 (`cortex-a76.cortex-a55`).
-   * Eksperimen & A/B validasi scheduler **`BORE`** / **`CASS`** di atas tuning EAS/MM terverifikasi `v1.2.4` (`uclamp_rt=384`, `55/45`, MGLRU + `kcompactd0` proaktif).
-   * Pemangkasan overhead kernel (`AUDITSYSCALL=n`, `FTRACE=n`, Spectre BHB/BP mitigation off, `BBRv2`).
-2. **Tahap 2 — GPU Adreno 618 Silicon Limit**
-   * Membuka OPP `800 / 825 MHz` + DDR bus `2133 MHz` + eksperimen undervolt bertahap.
-3. **Anti-Placebo Rule**
-   * Setiap perubahan diuji pakai harness deterministik (`/dev/input/event1`, `gfxinfo`, `vmstat`, `batt_ma`) melawan baseline **`Flow-Kernel v1.2.4`**.
+### Arsitektur Final **`Flow X v1.0.0`** (Pemenang Stage 1–4)
+1. **Stage 1 — ARMv8.2 LSE Atomics & Hot-Path Stripping:**
+   * `CONFIG_ARM64_LSE_ATOMICS=y` (dengan `DISABLE_LTO` pada `atomic_ll_sc.o`).
+   * Pemangkasan overhead syscall/allocator (`AUDITSYSCALL=n`, `HARDEN_BRANCH_PREDICTOR=n`, `SLAB_FREELIST_HARDENED=n`, `SLAB_FREELIST_RANDOM=n`, `HARDENED_USERCOPY=n`, `BUG_ON_DATA_CORRUPTION=n`, `DEBUG_LIST=n`, `DEBUG_KERNEL=n`) sambil mempertahankan `AUDIT=y`, `FTRACE=y`, dan `BPF_EVENTS=y`.
+2. **Stage 2 — Fixed `BORE 5.1.0` Scheduler:**
+   * `CONFIG_SCHED_BORE=y` (5 perbaikan port termasuk `DEQUEUE_SLEEP`, `idle_policy`, `misfit_task_load >= 1`, dan toggle runtime `/proc/sys/kernel/sched_bore` `0/1`) + sysfs telemetri read-only `/sys/class/kgsl/kgsl-3d0/flowx_arc`.
+3. **Stage 3 — Brutal MM & True Hot-Resume (`6/6`):**
+   * `6 GiB` LZ4 `zram0` floor (`>= 5 GiB` RAM), MGLRU `vm_swappiness = 100` (`0..200`), `lru_gen/min_ttl_ms = 2000`, `watermark_scale_factor = 200` (`~112 MiB` runway `kswapd` + `WMARK_LOW ~31 MiB`), proactive compaction (`base 1000ms`, scan `8192/32768`, `proactiveness = 40`), dan `vfs_cache_pressure = 60`.
+4. **Stage 4 — Adreno 618 GPU + DDR `2133 MHz` (`8137 MiB/s`):**
+   * Menjaga clock aman silikon `750 MHz` (`800/825 MHz` dipangkas setelah uji batas GMU `bin 159`) dengan unlock bandwidth memori GPU **`DDR 2133 MHz` (`bus-max = 12`)** pada `750 / 650 MHz`.
+5. **Anti-Placebo Rule:**
+   * Seluruh perubahan diverifikasi memakai harness deterministik & FlowBench melawan baseline **`Flow-Kernel v1.2.4`**.

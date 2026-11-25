@@ -168,8 +168,6 @@ static void _ab_buslevel_update(struct kgsl_pwrctrl *pwr,
  * Apply thermal and max/min limits first.  Then force the level with a
  * constraint if one exists.
  */
-static unsigned int flowx_oc_unlock;
-
 static unsigned int _adjust_pwrlevel(struct kgsl_pwrctrl *pwr, int level,
 					struct kgsl_pwr_constraint *pwrc)
 {
@@ -184,18 +182,6 @@ static unsigned int _adjust_pwrlevel(struct kgsl_pwrctrl *pwr, int level,
 					pwr->thermal_pwrlevel_floor);
 	min_pwrlevel = max_t(unsigned int, min_pwrlevel,
 					pwr->thermal_pwrlevel);
-
-	/*
-	 * Safe-Boot GPU OC gate: block pwrlevel 0 (800 MHz) until explicitly
-	 * unlocked via /sys/class/kgsl/kgsl-3d0/flowx_oc_unlock so PowerHAL
-	 * (powerhint.json) cannot trigger boot-time lockscreen resets.
-	 */
-	if (!READ_ONCE(flowx_oc_unlock) && pwr->num_pwrlevels > 2) {
-		if (max_pwrlevel == 0)
-			max_pwrlevel = 1;
-		if (min_pwrlevel == 0)
-			min_pwrlevel = 1;
-	}
 
 	switch (pwrc->type) {
 	case KGSL_CONSTRAINT_PWRLEVEL: {
@@ -1254,37 +1240,6 @@ static ssize_t kgsl_pwrctrl_flowx_arc_show(struct device *dev,
 	return flowx_arc_read(buf);
 }
 
-static ssize_t kgsl_pwrctrl_flowx_oc_unlock_show(struct device *dev,
-					struct device_attribute *attr,
-					char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%u\n", READ_ONCE(flowx_oc_unlock));
-}
-
-static ssize_t kgsl_pwrctrl_flowx_oc_unlock_store(struct device *dev,
-					struct device_attribute *attr,
-					const char *buf, size_t count)
-{
-	struct kgsl_device *device = kgsl_device_from_dev(dev);
-	unsigned int val = 0;
-	int ret;
-
-	if (device == NULL)
-		return 0;
-
-	ret = kgsl_sysfs_store(buf, &val);
-	if (ret)
-		return ret;
-
-	WRITE_ONCE(flowx_oc_unlock, val ? 1U : 0U);
-
-	mutex_lock(&device->mutex);
-	kgsl_pwrctrl_pwrlevel_change(device, device->pwrctrl.active_pwrlevel);
-	mutex_unlock(&device->mutex);
-
-	return count;
-}
-
 static ssize_t kgsl_pwrctrl_gpu_busy_percentage_show(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
@@ -1547,9 +1502,6 @@ static DEVICE_ATTR(force_no_nap, 0644,
 	kgsl_pwrctrl_force_no_nap_store);
 static DEVICE_ATTR(gpu_model, 0444, kgsl_pwrctrl_gpu_model_show, NULL);
 static DEVICE_ATTR(flowx_arc, 0444, kgsl_pwrctrl_flowx_arc_show, NULL);
-static DEVICE_ATTR(flowx_oc_unlock, 0644,
-	kgsl_pwrctrl_flowx_oc_unlock_show,
-	kgsl_pwrctrl_flowx_oc_unlock_store);
 static DEVICE_ATTR(gpu_busy_percentage, 0444,
 	kgsl_pwrctrl_gpu_busy_percentage_show, NULL);
 static DEVICE_ATTR(min_clock_mhz, 0644, kgsl_pwrctrl_min_clock_mhz_show,
@@ -1583,7 +1535,6 @@ static const struct attribute *pwrctrl_attr_list[] = {
 	&dev_attr_bus_split.attr,
 	&dev_attr_gpu_model.attr,
 	&dev_attr_flowx_arc.attr,
-	&dev_attr_flowx_oc_unlock.attr,
 	&dev_attr_gpu_busy_percentage.attr,
 	&dev_attr_min_clock_mhz.attr,
 	&dev_attr_max_clock_mhz.attr,
