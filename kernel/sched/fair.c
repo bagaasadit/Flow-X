@@ -208,16 +208,19 @@ static void update_burst_score(struct sched_entity *se) {
 	struct task_struct *p;
 	u8 prio, prev_prio, new_prio;
 
-	if (!entity_is_task(se)) return;
+	if (!entity_is_task(se))
+		return;
 	p = task_of(se);
+	if (idle_policy(p->policy))
+		return;
 	prio = p->static_prio - MAX_RT_PRIO;
 	prev_prio = min(39, prio + se->burst_score);
 
-	se->burst_score = se->burst_penalty >> 2;
+	se->burst_score = likely(sched_bore) ? (se->burst_penalty >> 2) : 0;
 
 	new_prio = min(39, prio + se->burst_score);
 	if (new_prio != prev_prio)
-	 	reweight_task(p, new_prio);
+		reweight_task(p, new_prio);
 }
 
 static void update_burst_penalty(struct sched_entity *se) {
@@ -985,9 +988,15 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	schedstat_add(cfs_rq->exec_clock, delta_exec);
 
 #ifdef CONFIG_SCHED_BORE
-	curr->burst_time += delta_exec;
-	update_burst_penalty(curr);
-	curr->vruntime += max(1ULL, calc_delta_fair(delta_exec, curr));
+	if (likely(sched_bore)) {
+		curr->burst_time += delta_exec;
+		update_burst_penalty(curr);
+		curr->vruntime += max(1ULL, calc_delta_fair(delta_exec, curr));
+	} else {
+		if (unlikely(curr->burst_score))
+			update_burst_score(curr);
+		curr->vruntime += calc_delta_fair(delta_exec, curr);
+	}
 #else // !CONFIG_SCHED_BORE
 	curr->vruntime += calc_delta_fair(delta_exec, curr);
 #endif // CONFIG_SCHED_BORE
@@ -3830,7 +3839,7 @@ static inline void update_misfit_status(struct task_struct *p, struct rq *rq)
 		return;
 	}
 
-	rq->misfit_task_load = task_h_load(p);
+	rq->misfit_task_load = max_t(unsigned long, 1UL, task_h_load(p));
 }
 
 static inline unsigned long _task_util_est(struct task_struct *p)
@@ -5439,16 +5448,8 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		cpufreq_update_util(rq, SCHED_CPUFREQ_IOWAIT);
 
 #ifdef CONFIG_SCHED_BORE
-	{
-		int task_sleep = flags & DEQUEUE_SLEEP;
-
-		if (task_sleep) {
-			cfs_rq = cfs_rq_of(se);
-			if (cfs_rq->curr == se)
-				update_curr(cfs_rq);
-			restart_burst(se);
-		}
-	}
+	if (unlikely(!sched_bore && se->burst_score))
+		update_burst_score(se);
 #endif // CONFIG_SCHED_BORE
 
 	for_each_sched_entity(se) {
@@ -5520,6 +5521,19 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	 * current task is not more accounted for in the selection of the OPP.
 	 */
 	schedtune_dequeue_task(p, cpu_of(rq));
+
+#ifdef CONFIG_SCHED_BORE
+	if (likely(sched_bore)) {
+		if (task_sleep) {
+			cfs_rq = cfs_rq_of(se);
+			if (cfs_rq->curr == se)
+				update_curr(cfs_rq);
+			restart_burst(se);
+		}
+	} else if (unlikely(se->burst_score)) {
+		update_burst_score(se);
+	}
+#endif // CONFIG_SCHED_BORE
 
 	for_each_sched_entity(se) {
 		cfs_rq = cfs_rq_of(se);
@@ -9070,12 +9084,20 @@ static void yield_task_fair(struct rq *rq)
 	/*
 	 * Are we the only task in the tree?
 	 */
-#if !defined(CONFIG_SCHED_BORE)
-	if (unlikely(rq->nr_running == 1))
+	if (unlikely(rq->nr_running == 1)) {
+#ifdef CONFIG_SCHED_BORE
+		if (likely(sched_bore)) {
+			update_rq_clock(rq);
+			update_curr(cfs_rq);
+			restart_burst(se);
+		} else if (unlikely(se->burst_score)) {
+			update_burst_score(se);
+		}
+#endif // CONFIG_SCHED_BORE
 		return;
+	}
 
 	clear_buddies(cfs_rq, se);
-#endif // CONFIG_SCHED_BORE
 
 	update_rq_clock(rq);
 	/*
@@ -9084,11 +9106,10 @@ static void yield_task_fair(struct rq *rq)
 	update_curr(cfs_rq);
 
 #ifdef CONFIG_SCHED_BORE
-	restart_burst(se);
-	if (unlikely(rq->nr_running == 1))
-		return;
-
-	clear_buddies(cfs_rq, se);
+	if (likely(sched_bore))
+		restart_burst(se);
+	else if (unlikely(se->burst_score))
+		update_burst_score(se);
 #endif // CONFIG_SCHED_BORE
 
 	/*
@@ -12490,7 +12511,8 @@ static void task_fork_fair(struct task_struct *p)
 		se->vruntime = curr->vruntime;
 	}
 #ifdef CONFIG_SCHED_BORE
-	update_burst_score(se);
+	if (likely(sched_bore))
+		update_burst_score(se);
 #endif // CONFIG_SCHED_BORE
 	place_entity(cfs_rq, se, 1);
 

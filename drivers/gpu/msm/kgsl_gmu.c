@@ -615,6 +615,16 @@ static const char debug_strs[][8] = {
  * @arc: Pointer to RPMh rail controller (ARC) voltage table
  * @res_id: Pointer to 8 char array that contains rail name
  */
+static char flowx_arc_buf[512];
+static size_t flowx_arc_len;
+
+ssize_t flowx_arc_read(char *buf)
+{
+	if (!flowx_arc_len)
+		return scnprintf(buf, PAGE_SIZE, "uninitialized\n");
+	return scnprintf(buf, PAGE_SIZE, "%s", flowx_arc_buf);
+}
+
 static int rpmh_arc_cmds(struct gmu_device *gmu,
 		struct rpmh_arc_vals *arc, const char *res_id)
 {
@@ -648,9 +658,26 @@ static int rpmh_arc_cmds(struct gmu_device *gmu,
 	{
 		unsigned int idx;
 
-		for (idx = 0; idx < arc->num; idx++)
+		if (!strcmp(res_id, gfx_res_id))
+			flowx_arc_len = 0;
+
+		if (flowx_arc_len < sizeof(flowx_arc_buf) - 1)
+			flowx_arc_len += scnprintf(flowx_arc_buf + flowx_arc_len,
+				sizeof(flowx_arc_buf) - flowx_arc_len,
+				"%s:", res_id);
+
+		for (idx = 0; idx < arc->num; idx++) {
 			dev_info(&gmu->pdev->dev, "flowx_arc %s[%u]=%u\n",
 				 res_id, idx, arc->val[idx]);
+			if (flowx_arc_len < sizeof(flowx_arc_buf) - 1)
+				flowx_arc_len += scnprintf(flowx_arc_buf + flowx_arc_len,
+					sizeof(flowx_arc_buf) - flowx_arc_len,
+					" %u", arc->val[idx]);
+		}
+
+		if (flowx_arc_len < sizeof(flowx_arc_buf) - 1)
+			flowx_arc_len += scnprintf(flowx_arc_buf + flowx_arc_len,
+				sizeof(flowx_arc_buf) - flowx_arc_len, "\n");
 	}
 
 	return 0;

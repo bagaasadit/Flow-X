@@ -764,6 +764,10 @@ static void set_load_weight(struct task_struct *p)
 		return;
 	}
 
+#ifdef CONFIG_SCHED_BORE
+	if (likely(sched_bore) && fair_policy(p->policy))
+		prio = min(39, prio + (int)p->se.burst_score);
+#endif
 	load->weight = scale_load(sched_prio_to_weight[prio]);
 	load->inv_weight = sched_prio_to_wmult[prio];
 }
@@ -3277,9 +3281,23 @@ static inline void inherit_burst(struct task_struct *p) {
 }
 
 static void sched_post_fork_bore(struct task_struct *p) {
-	if (p->sched_class == &fair_sched_class)
+	if (likely(sched_bore) && p->sched_class == &fair_sched_class) {
 		inherit_burst(p);
-	p->se.burst_penalty = p->se.prev_burst_penalty;
+		p->se.burst_penalty = p->se.prev_burst_penalty;
+		if (fair_policy(p->policy)) {
+			int prio = p->static_prio - MAX_RT_PRIO;
+			p->se.burst_score = p->se.burst_penalty >> 2;
+			prio = min(39, prio + (int)p->se.burst_score);
+			p->se.load.weight = scale_load(sched_prio_to_weight[prio]);
+			p->se.load.inv_weight = sched_prio_to_wmult[prio];
+		}
+	} else {
+		p->se.burst_penalty = 0;
+		p->se.prev_burst_penalty = 0;
+		p->se.burst_score = 0;
+		if (p->sched_class == &fair_sched_class)
+			set_load_weight(p);
+	}
 }
 #endif // CONFIG_SCHED_BORE
 

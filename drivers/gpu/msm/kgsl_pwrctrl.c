@@ -1231,6 +1231,15 @@ static ssize_t kgsl_pwrctrl_gpu_model_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%s\n", model_str);
 }
 
+extern ssize_t flowx_arc_read(char *buf);
+
+static ssize_t kgsl_pwrctrl_flowx_arc_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	return flowx_arc_read(buf);
+}
+
 static ssize_t kgsl_pwrctrl_gpu_busy_percentage_show(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
@@ -1492,6 +1501,7 @@ static DEVICE_ATTR(force_no_nap, 0644,
 	kgsl_pwrctrl_force_no_nap_show,
 	kgsl_pwrctrl_force_no_nap_store);
 static DEVICE_ATTR(gpu_model, 0444, kgsl_pwrctrl_gpu_model_show, NULL);
+static DEVICE_ATTR(flowx_arc, 0444, kgsl_pwrctrl_flowx_arc_show, NULL);
 static DEVICE_ATTR(gpu_busy_percentage, 0444,
 	kgsl_pwrctrl_gpu_busy_percentage_show, NULL);
 static DEVICE_ATTR(min_clock_mhz, 0644, kgsl_pwrctrl_min_clock_mhz_show,
@@ -1524,6 +1534,7 @@ static const struct attribute *pwrctrl_attr_list[] = {
 	&dev_attr_force_no_nap.attr,
 	&dev_attr_bus_split.attr,
 	&dev_attr_gpu_model.attr,
+	&dev_attr_flowx_arc.attr,
 	&dev_attr_gpu_busy_percentage.attr,
 	&dev_attr_min_clock_mhz.attr,
 	&dev_attr_max_clock_mhz.attr,
