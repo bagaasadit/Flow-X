@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.5.1-s4] - 2026-11-25
+### Fixed / Changed
+- **Stage 4 Safe-Boot Probe (`800 MHz` `TURBO` + `DDR 2133 MHz` + Anti-Bootloop Gate):**
+  - Dropped `825 MHz` (`TURBO_L1`, `gfx.lvl 416` > `mx.lvl 384`) and duplicate `750 MHz` (`384` VLVL) after `v0.5.0-s4` white-screen lockscreen reset; aligned `qcom,gpu-pwrlevels-5` (`speed-bin 159`) cleanly to Qualcomm's 7-level `qcom,gpu-pwrlevels-2` layout (`800 / 650 / 565 / 430 / 355 / 267 / XO`, matching `/vendor/etc/powerhint.json` `0..5` indices) with **`DDR 2133 MHz` (`bus-max=12`, `8137 MiB/s`)** unlocked on `800 / 650 MHz`.
+  - Added `/sys/class/kgsl/kgsl-3d0/flowx_oc_unlock` (`0` = Safe-Boot cap at `pwrlevel 1 = 650 MHz` in `_adjust_pwrlevel()`, immune to PowerHAL `max_pwrlevel=0` overrides; `1` = unlock `800 MHz` at runtime for stress testing).
+- Bumped `CONFIG_LOCALVERSION` to `-Flow-X-v0.5.1-s4`.
+
 ## [v0.5.0-s4] - 2026-11-25
 ### Added
 - **Stage 4 (Adreno 618 GPU Overclock + DDR 2133 MHz Unlock):**
