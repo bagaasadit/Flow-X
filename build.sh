@@ -240,6 +240,9 @@ FLOW_VER=$(sed -n 's/^CONFIG_LOCALVERSION="-Flow-X-\([^"]*\)"/\1/p' arch/arm64/c
 [ -n "$FLOW_VER" ] || FLOW_VER="v0.1.0"
 rm -rf AnyKernel
 cp -a AnyKernel3 AnyKernel
+sed -i -E "s/(^[[:space:]]*)v[0-9A-Za-z._-]+([[:space:]]+•)/\1${FLOW_VER}\2/" AnyKernel/banner
+sed -i -E "s/^(kernel\.string=Flow X )[^ ]+/\1${FLOW_VER}/" AnyKernel/anykernel.sh
+sed -i -E "s/(Version[[:space:]]*:[[:space:]]*)[^\" ;]+/\1${FLOW_VER}/" AnyKernel/anykernel.sh
 cp "$kimage" AnyKernel/Image
 cp "$dtb_src" AnyKernel/dtb
 cp out/arch/arm64/boot/dtbo.img AnyKernel/dtbo.img
