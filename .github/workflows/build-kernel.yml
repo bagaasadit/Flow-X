@@ -1,0 +1,580 @@
+# Flow X CI — miatoll (SM7125 / atoll), arm64, Experimental
+#
+# Completely separate from stable Flow-Kernel (bagaasadit/Flow-Kernel).
+# Runs ONLY on manual workflow_dispatch so experimental commits never trigger
+# unwanted multi-hour builds until explicitly launched.
+name: Flow X CI
+
+on:
+  # Manual runs only (neutron_tag overridable for testing a bump)
+  workflow_dispatch:
+    inputs:
+      neutron_tag:
+        description: "Neutron Clang release tag"
+        required: false
+        default: "06092026"
+
+# one build per ref; a new push cancels the previous run
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# contents:write is required by the "push logs to build-logs" step
+permissions:
+  contents: write
+
+env:
+  NEUTRON_TAG: ${{ github.event.inputs.neutron_tag || '06092026' }}
+  NEUTRON_DIR: /home/runner/neutron-clang
+  CCACHE_MAXSIZE: 4G
+  CCACHE_COMPRESSLEVEL: 1
+  KBUILD_BUILD_USER: bagaasadit
+  KBUILD_BUILD_HOST: builder
+  BAKASU_APK_NAME: BakaSU_v4.2.0-rc3_35252-arm64-v8a-release.apk
+  BAKASU_APK_URL: https://github.com/bagaasadit/Flow-Kernel/releases/download/v1.2.0/BakaSU_v4.2.0-rc3_35252-arm64-v8a-release.apk
+  BAKASU_APK_SHA256: 43ccd6ec08844bf656b0800d84567c4f04412203446e6dada9570008f180fe25
+
+jobs:
+  build:
+    name: Build Flow X (miatoll, arm64, BakaSU-SUSFS, Experimental)
+    runs-on: ubuntu-24.04
+    # LTO + Polly on a 4 vCPU runner is slow; 6h is the GitHub maximum
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Test haptics logic
+        run: python3 tools/testing/selftests/aw8624/run.py
+
+      - name: Show build inputs
+        run: |
+          LOCALVER=$(sed -n 's/^CONFIG_LOCALVERSION=//p' arch/arm64/configs/vendor/xiaomi/miatoll_defconfig | tr -d '"')
+          FLOW_VER=${LOCALVER#-Flow-X-}
+          [ -n "$FLOW_VER" ] || FLOW_VER="v0.1.0"
+          echo "FLOW_VER=${FLOW_VER}" >> "$GITHUB_ENV"
+          echo "EXPECTED_REL=5.15.207${LOCALVER}" >> "$GITHUB_ENV"
+          {
+            echo "## Flow X ${FLOW_VER} build inputs"
+            echo
+            echo "| item | value |"
+            echo "|---|---|"
+            echo "| repo | \`${{ github.repository }}\` |"
+            echo "| ref | \`${{ github.ref }}\` |"
+            echo "| commit | \`${{ github.sha }}\` |"
+            echo "| kernel | \`$(awk -F' = ' '/^(VERSION|PATCHLEVEL|SUBLEVEL) = /{printf "%s.", $2}' Makefile | sed 's/\.$//')\` |"
+            echo "| defconfig | \`vendor/xiaomi/miatoll_defconfig\` |"
+            echo "| localversion | \`${LOCALVER}\` |"
+            echo "| flow_ver | \`${FLOW_VER}\` |"
+            echo "| neutron tag | \`${NEUTRON_TAG}\` |"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android \
+                      /usr/share/swift /opt/hostedtoolcache/CodeQL \
+                      /usr/local/share/boost /usr/lib/jvm 2>/dev/null || true
+          df -h /
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            clang lld llvm zip ccache pigz zstd bc bison flex \
+            libssl-dev libelf-dev lz4 lzop
+          echo "--- fallback toolchain (only used if Neutron is unreachable) ---"
+          clang --version | head -1
+          ld.lld --version | head -1
+
+      - name: Restore Neutron Clang
+        id: neutron-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.NEUTRON_DIR }}
+          key: neutron-clang-${{ runner.os }}-${{ env.NEUTRON_TAG }}
+
+      - name: Install Neutron Clang
+        run: |
+          set -euo pipefail
+          CLANG="$NEUTRON_DIR/bin/clang"
+          if [ -x "$CLANG" ]; then
+            echo "Neutron restored from cache"
+          else
+            TAR="/tmp/neutron-clang-${NEUTRON_TAG}.tar.zst"
+            URL="https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/${NEUTRON_TAG}/neutron-clang-${NEUTRON_TAG}.tar.zst"
+            echo "Downloading $URL"
+            curl -fL --retry 5 --retry-delay 5 --connect-timeout 20 -o "$TAR" "$URL"
+            rm -rf "$NEUTRON_DIR"; mkdir -p "$NEUTRON_DIR"
+            tar --use-compress-program=unzstd -xf "$TAR" -C "$NEUTRON_DIR" \
+              || tar -I zstd -xf "$TAR" -C "$NEUTRON_DIR"
+            rm -f "$TAR"
+            # some releases nest everything under a top-level directory
+            if [ ! -x "$CLANG" ]; then
+              FOUND=$(find "$NEUTRON_DIR" -maxdepth 4 -type f -name clang -path '*/bin/*' | head -1)
+              # $FOUND is <prefix>/bin/clang; NEUTRON_DIR must be <prefix>
+              [ -n "$FOUND" ] && NEUTRON_DIR=$(dirname "$(dirname "$FOUND")")
+              echo "NEUTRON_DIR=$NEUTRON_DIR" >> "$GITHUB_ENV"
+              CLANG="$NEUTRON_DIR/bin/clang"
+            fi
+          fi
+          for tool in clang clang++ ld.lld llvm-ar llvm-nm llvm-objcopy llvm-strip; do
+            [ -x "$NEUTRON_DIR/bin/$tool" ] || { echo "::error::Neutron is missing bin/$tool"; exit 1; }
+          done
+          "$CLANG" --version | head -2
+          echo "$NEUTRON_DIR/bin" >> "$GITHUB_PATH"
+
+      - name: Verify Polly support (fail fast)
+        run: |
+          set -euo pipefail
+          # CONFIG_LLVM_POLLY=y, so kbuild passes exactly these flags; an LLVM
+          # without Polly (or with renamed pass options) fails here in seconds
+          # instead of 20+ minutes into the build.
+          POLLY_FLAGS="
+            -mllvm -polly
+            -mllvm -polly-ast-use-context
+            -mllvm -polly-detect-keep-going
+            -mllvm -polly-invariant-load-hoisting
+            -mllvm -polly-vectorizer=stripmine
+            -mllvm -polly-loopfusion-greedy=1
+            -mllvm -polly-reschedule=1
+            -mllvm -polly-postopts=1
+            -mllvm -polly-scheduling=dynamic
+            -mllvm -polly-scheduling-chunksize=1
+            -mllvm -polly-run-dce"
+          printf 'int probe(int a, int b) { return a * b + 1; }\n' > /tmp/polly-probe.c
+          # shellcheck disable=SC2086
+          if ! "$NEUTRON_DIR/bin/clang" -target aarch64-linux-gnu -O2 $POLLY_FLAGS \
+                 -c /tmp/polly-probe.c -o /tmp/polly-probe.o 2>/tmp/polly-probe.err; then
+            echo "::error::This Neutron build does not accept the Polly flags required by CONFIG_LLVM_POLLY"
+            sed -n '1,40p' /tmp/polly-probe.err
+            {
+              echo "## Polly probe failed"
+              echo
+              echo '```'
+              sed -n '1,40p' /tmp/polly-probe.err
+              echo '```'
+              echo
+              echo "Fix: bump \`neutron_tag\` (workflow_dispatch input) or set"
+              echo "\`CONFIG_LLVM_POLLY\` off in \`vendor/xiaomi/miatoll_defconfig\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "Polly flag set accepted"
+
+      - name: Save Neutron Clang
+        if: steps.neutron-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/neutron-clang
+          key: ${{ steps.neutron-cache.outputs.cache-primary-key }}
+
+      - name: Restore ccache
+        id: ccache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.ccache
+          # Unique snapshots let successful and failed builds refresh cached objects.
+          key: ccache-${{ runner.os }}-${{ env.NEUTRON_TAG }}-${{ hashFiles('arch/arm64/configs/vendor/xiaomi/miatoll_defconfig', 'build.sh', 'Makefile') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ env.NEUTRON_TAG }}-${{ hashFiles('arch/arm64/configs/vendor/xiaomi/miatoll_defconfig', 'build.sh', 'Makefile') }}-
+            ccache-${{ runner.os }}-${{ env.NEUTRON_TAG }}-
+
+      - name: Set up BakaSU
+        run: |
+          set -euo pipefail
+          # drivers/kernelsu is a symlink to ../KernelSU/kernel, so the driver
+          # source is not vendored. Full history (blobless) is required:
+          # BakaSU computes KSU_VERSION as 30000 + commit count + 700 and its
+          # Kbuild errors out when KernelSU/.git is missing.
+          git clone --filter=blob:none https://github.com/Baka-SU/BakaSU KernelSU
+          git -C KernelSU checkout -q 548d1dda
+          echo "BakaSU: $(git -C KernelSU log -1 --format='%h %s') ($(git -C KernelSU rev-list --count HEAD) commits)"
+          echo "KSU_COMMIT=$(git -C KernelSU log -1 --format=%h)" >> "$GITHUB_ENV"
+          test -e drivers/kernelsu/Kbuild || {
+            echo "::error::drivers/kernelsu is not a usable symlink to ../KernelSU/kernel"
+            exit 1
+          }
+
+      - name: Build kernel
+        id: build
+        run: |
+          set -o pipefail
+          chmod +x build.sh
+          # build.sh reuses $NEUTRON_DIR when bin/clang is present (no re-download)
+          # and skips the clone above because KernelSU/.git already exists
+          ./build.sh 2>&1 | tee "$RUNNER_TEMP/build.log"
+
+      - name: Verify SUSFS is in the built kernel
+        id: susfs-verify
+        if: success()
+        run: |
+          set -euo pipefail
+          exec > >(tee "$RUNNER_TEMP/verify.log") 2>&1
+          fail=0
+
+          echo "-- kernel config"
+          grep -E "^CONFIG_(KSU|KSU_SUSFS)" out/.config || echo "  (no KSU symbols at all!)"
+
+          echo "-- build outputs"
+          ls -l out/vmlinux out/arch/arm64/boot/Image out/arch/arm64/boot/Image.gz 2>&1 || true
+
+          # exactly the nine features the sibling branch ships
+          for sym in CONFIG_KSU CONFIG_KSU_SUSFS \
+                     CONFIG_KSU_SUSFS_SUS_PATH CONFIG_KSU_SUSFS_SUS_MOUNT \
+                     CONFIG_KSU_SUSFS_SUS_KSTAT CONFIG_KSU_SUSFS_SPOOF_UNAME \
+                     CONFIG_KSU_SUSFS_ENABLE_LOG \
+                     CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
+                     CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
+                     CONFIG_KSU_SUSFS_OPEN_REDIRECT \
+                     CONFIG_KSU_SUSFS_SUS_MAP \
+                     CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER; do
+            if grep -qx "$sym=y" out/.config; then
+              echo "  ok   $sym=y"
+            else
+              echo "::error::$sym is not enabled in out/.config"
+              fail=1
+            fi
+          done
+
+          # CONFIG_KSU_SUSFS is the inline-hook entry of BakaSU's hooking
+          # method choice, so both other methods must stay off (tracepoint is
+          # GKI2-only and would fail the Kbuild check on 4.14).
+          for sym in CONFIG_KSU_MANUAL_HOOK CONFIG_KSU_TRACEPOINT_HOOK; do
+            if grep -qx "$sym=y" out/.config; then
+              echo "::error::$sym must stay off (CONFIG_KSU_SUSFS is the inline hook)"
+              fail=1
+            else
+              echo "  ok   $sym off"
+            fi
+          done
+
+          # BakaSU's SUSFS menu has neither option; assert they stay absent.
+          for sym in CONFIG_KSU_SUSFS_TRY_UMOUNT CONFIG_KSU_SUSFS_SUS_MEMFD; do
+            if grep -qx "$sym=y" out/.config; then
+              echo "::error::$sym must stay off"
+              fail=1
+            else
+              echo "  ok   $sym off"
+            fi
+          done
+
+          # The manager's SuperUser/Module tabs depend on the UAPI version it
+          # speaks; BakaSU shipping this pin advertises 6.
+          if grep -qE "^static const __u32 KERNEL_SU_UAPI_VERSION = 6;" \
+               KernelSU/uapi/supercall.h 2>/dev/null || \
+             grep -qE "^static const __u32 KERNEL_SU_UAPI_VERSION = 6;" \
+               KernelSU/kernel/include/uapi/supercall.h 2>/dev/null; then
+            echo "  ok   BakaSU advertises uapi 6"
+          else
+            echo "::error::BakaSU no longer advertises KERNEL_SU_UAPI_VERSION 6"
+            fail=1
+          fi
+
+          # Scheduler and container features added on top of the SUSFS set.
+          # These are the ones userspace advertises: uclamp/schedtune for
+          # task_profiles, and the Droidspaces option set for containers.
+          for sym in CONFIG_UCLAMP_TASK CONFIG_UCLAMP_TASK_GROUP \
+                     CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL \
+                     CONFIG_SCHED_TUNE CONFIG_SCHED_AUTOGROUP \
+                     CONFIG_SYSVIPC CONFIG_POSIX_MQUEUE \
+                     CONFIG_PID_NS CONFIG_IPC_NS CONFIG_NET_NS CONFIG_USER_NS \
+                     CONFIG_SECCOMP_FILTER CONFIG_DEVTMPFS CONFIG_TMPFS_XATTR \
+                     CONFIG_FAIR_GROUP_SCHED \
+                     CONFIG_CGROUP_PIDS CONFIG_CGROUP_DEVICE \
+                     CONFIG_CGROUP_NET_PRIO CONFIG_MEMCG \
+                     CONFIG_NF_NAT CONFIG_NF_TABLES CONFIG_IP_NF_NAT \
+                     CONFIG_IP_NF_TARGET_MASQUERADE CONFIG_MACVLAN; do
+            if grep -qx "$sym=y" out/.config; then
+              echo "  ok   $sym=y"
+            else
+              echo "::error::$sym is not enabled in out/.config (scheduler/container feature missing)"
+              grep -E "^${sym}=" out/.config || echo "  ($sym not present at all - dependency unmet?)"
+              fail=1
+            fi
+          done
+
+          # Flow v1.1.0+ / v1.2.0: verify MGLRU, UI/MM responsiveness, and BLK_WBT flags stay active
+          for sym in CONFIG_LRU_GEN CONFIG_LRU_GEN_ENABLED \
+                     CONFIG_PELT_UTIL_HALFLIFE_8 \
+                     CONFIG_BALANCE_ANON_FILE_RECLAIM CONFIG_HZ_300 \
+                     CONFIG_VM_EVENT_COUNTERS \
+                     CONFIG_BLK_WBT CONFIG_BLK_WBT_SQ \
+                     CONFIG_CPUSET_ASSIST; do
+            if grep -qx "$sym=y" out/.config; then
+              echo "  ok   $sym=y"
+            else
+              echo "::error::$sym must stay enabled for Flow MM/UI/UFS responsiveness"
+              fail=1
+            fi
+          done
+
+          # Flow X: keep CFS_BANDWIDTH, SSBD and unpriv-BPF lockout off (BORE/CASS may be toggled in Flow X)
+          for sym in CONFIG_CFS_BANDWIDTH CONFIG_ARM64_SSBD CONFIG_BPF_UNPRIV_DEFAULT_OFF; do
+            if grep -qx "$sym=y" out/.config; then
+              echo "::error::$sym must stay off for Flow X responsiveness and MM stability"
+              fail=1
+            else
+              echo "  ok   $sym off"
+            fi
+          done
+
+          # Every inline hook site must still be wired. A dropped hook does
+          # not fail to build - it fails silently at boot, which is how the
+          # init.rc size hook went missing and left modules stuck in
+          # modules_update until a userspace reboot replayed the stage.
+          for hook in \
+            "fs/exec.c:ksu_handle_execveat(&fd, &filename" \
+            "fs/open.c:ksu_handle_faccessat(&dfd, &fname" \
+            "fs/stat.c:ksu_handle_stat(&dfd, &fname" \
+            "fs/stat.c:ksu_handle_vfs_fstat(fd, &stat->size)" \
+            "fs/read_write.c:ksu_handle_sys_read(fd, &buf, &count)" \
+            "kernel/sys.c:ksu_handle_setresuid(ruid, euid, suid)" \
+            "kernel/reboot.c:ksu_handle_sys_reboot(magic1, magic2" \
+            "drivers/input/input.c:ksu_handle_input_handle_event(&type, &code"; do
+            f=${hook%%:*}
+            pat=${hook#*:}
+            if grep -qF "$pat" "$f"; then
+              echo "  ok   hook $f -> ${pat%%(*}"
+            else
+              echo "::error::manual hook missing: $f should call ${pat%%(*}"
+              fail=1
+            fi
+          done
+
+          # fs/susfs.c must have been compiled, not just selected
+          if [ -f out/fs/susfs.o ] ||
+             grep -qE "CC[[:space:]]+fs/susfs\.o" "$RUNNER_TEMP/build.log"; then
+            echo "  ok   fs/susfs.o compiled"
+          else
+            echo "::error::fs/susfs.o was never compiled"
+            fail=1
+          fi
+
+          # and the symbols must survive into the linked kernel. vmlinux is
+          # uncompressed; Image.gz would need gunzip before grepping.
+          img=out/vmlinux
+          if [ ! -f "$img" ]; then
+            img=out/arch/arm64/boot/Image
+          fi
+          if [ ! -f "$img" ] && [ -f out/arch/arm64/boot/Image.gz ]; then
+            gunzip -c out/arch/arm64/boot/Image.gz > "$RUNNER_TEMP/Image.raw"
+            img="$RUNNER_TEMP/Image.raw"
+          fi
+
+          if [ -f "$img" ]; then
+            EXPECTED_REL="5.15.207$(sed -n 's/^CONFIG_LOCALVERSION=//p' arch/arm64/configs/vendor/xiaomi/miatoll_defconfig | tr -d '"')"
+            echo "  grepping $img ($(stat -c%s "$img") bytes)"
+            for str in susfs_init susfs_open_redirect susfs_add_sus_path \
+                       susfs_spoof_uname ksu_handle_execveat "$EXPECTED_REL"; do
+              if grep -qa -- "$str" "$img"; then
+                echo "  ok   image contains '$str'"
+              else
+                echo "::error::image is missing '$str'"
+                fail=1
+              fi
+            done
+          else
+            echo "::error::no built kernel image found"
+            fail=1
+          fi
+
+          exit $fail
+
+      - name: Save ccache
+        if: ${{ !cancelled() && steps.build.outcome != 'skipped' && steps.ccache-restore.outputs.cache-hit != 'true' && steps.ccache-restore.outputs.cache-primary-key != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.ccache
+          key: ${{ steps.ccache-restore.outputs.cache-primary-key }}
+
+      - name: Package summary
+        if: success()
+        run: |
+          set -euo pipefail
+          ZIP=$(ls -1 AnyKernel/Flow-X-*.zip | head -1)
+          ls -lh "$ZIP"
+          {
+            echo "## Flow X ${FLOW_VER} build artifact"
+            echo
+            echo "| item | value |"
+            echo "|---|---|"
+            echo "| zip | \`$(basename "$ZIP")\` |"
+            echo "| size | $(du -h "$ZIP" | cut -f1) |"
+            echo "| sha256 | \`$(sha256sum "$ZIP" | cut -d' ' -f1)\` |"
+            echo "| Image | $(du -h out/arch/arm64/boot/Image | cut -f1) |"
+            echo "| dtbo.img | $(du -h out/arch/arm64/boot/dtbo.img | cut -f1) |"
+            echo "| clang | \`$("$NEUTRON_DIR/bin/clang" --version | head -1)\` |"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          ccache -s | head -15 || true
+
+      - name: Upload kernel zip (artifact)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Flow-X-${{ env.FLOW_VER }}-BakaSU-miatoll
+          path: AnyKernel/Flow-X-*.zip
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Prepare failure report
+        if: failure()
+        run: |
+          LOG="$RUNNER_TEMP/build.log"
+          [ -f "$LOG" ] || : > "$LOG"
+          {
+            echo "# Flow X CI - FAILED run #${{ github.run_number }}"
+            echo
+            echo "- run URL : ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "- ref     : ${{ github.ref }}"
+            echo "- commit  : ${{ github.sha }}"
+            echo "- date    : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo "- clang   : $("$NEUTRON_DIR/bin/clang" --version 2>/dev/null | head -1)"
+            echo
+            echo "## Extracted errors (last 300 matches)"
+            echo '```'
+            grep -nE "error:|Error [0-9]+|fatal error|undefined (reference|symbol)|No rule to make target|ld\.lld:|Segmentation" \
+              "$LOG" | tail -n 300 || echo "(no pattern matches - see full build.log)"
+            echo '```'
+            echo
+            echo "## Tail of build log (last 250 lines)"
+            echo '```'
+            tail -n 250 "$LOG"
+            echo '```'
+            if [ -s "$RUNNER_TEMP/verify.log" ]; then
+              echo
+              echo "## SUSFS verification output"
+              echo '```'
+              cat "$RUNNER_TEMP/verify.log"
+              echo '```'
+            fi
+          } > "$RUNNER_TEMP/ERRORS.md"
+          cat "$RUNNER_TEMP/ERRORS.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Push logs to build-logs branch
+        if: failure()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RUNDIR="runs/$(date -u +%Y%m%d-%H%M%S)-run${{ github.run_number }}"
+          WORK=/tmp/logpush
+          rm -rf "$WORK"; git init -q "$WORK"; cd "$WORK"
+          git config user.name  "sixfaced-ci[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git fetch -q --depth=1 origin build-logs || true
+          if git rev-parse -q --verify origin/build-logs >/dev/null; then
+            git checkout -q -b build-logs origin/build-logs
+          else
+            git checkout -q --orphan build-logs
+          fi
+          mkdir -p "$RUNDIR"
+          cp "$RUNNER_TEMP/build.log" "$RUNDIR/build.log" 2>/dev/null \
+            || echo "(no build.log produced)" > "$RUNDIR/build.log"
+          cp "$RUNNER_TEMP/ERRORS.md" "$RUNDIR/ERRORS.md" 2>/dev/null || true
+          SZ=$(stat -c%s "$RUNDIR/build.log" 2>/dev/null || echo 0)
+          if [ "$SZ" -gt 80000000 ]; then gzip -9f "$RUNDIR/build.log"; fi
+          # keep the branch tip slim: last 15 runs (older ones stay in history/artifacts)
+          ls -1dt runs/*/ 2>/dev/null | tail -n +16 | xargs -r rm -rf
+          printf 'CI build logs (failed runs). Latest runs live in runs/.\n' > README.md
+          git add -A
+          git commit -q -m "build-logs: FAILED run #${{ github.run_number }} (${{ github.sha }})" || true
+          git push -q origin HEAD:refs/heads/build-logs \
+            || echo "::warning::could not push build-logs branch (token permissions?); logs are still in the run artifacts"
+
+      - name: Upload failure logs (artifact)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-run${{ github.run_number }}
+          path: |
+            ${{ runner.temp }}/build.log
+            ${{ runner.temp }}/ERRORS.md
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # Publish Flow X BakaSU zip and BakaSU Manager APK on a per-version GitHub Release page.
+      - name: Publish Flow X per-version release
+        if: success() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/bakasu')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          SRC=$(ls -1 AnyKernel/Flow-X-*.zip | head -1)
+          OUT="$RUNNER_TEMP/Flow-X-${FLOW_VER}-miatoll-BakaSU.zip"
+          cp "$SRC" "$OUT"
+          APK_PATH="$RUNNER_TEMP/${BAKASU_APK_NAME}"
+          curl -fL --retry 3 --retry-delay 3 -o "$APK_PATH" "${BAKASU_APK_URL}"
+          echo "${BAKASU_APK_SHA256}  ${APK_PATH}" | sha256sum -c -
+          ls -lh "$SRC" "$OUT" "$APK_PATH"
+          export OUT APK_PATH
+          python3 - << 'PY' > "$RUNNER_TEMP/RELEASE_NOTES.md"
+          import hashlib, os, re, subprocess
+          flow_ver = os.environ["FLOW_VER"]
+          out_zip = os.environ["OUT"]
+          apk_path = os.environ["APK_PATH"]
+          apk_name = os.environ["BAKASU_APK_NAME"]
+          apk_sha = os.environ["BAKASU_APK_SHA256"]
+          notes = ""
+          if os.path.isfile("CHANGELOG.md"):
+              with open("CHANGELOG.md", "r", encoding="utf-8") as f:
+                  text = f.read()
+              m = re.search(rf"^##\s+\[{re.escape(flow_ver)}\][^\n]*\n(.*?)(?=^##\s+\[|\Z)", text, re.M | re.S)
+              if m:
+                  notes = m.group(1).strip()
+          if not notes:
+              log = subprocess.check_output(["git", "log", "-n", "10", "--format=- %s (%h)"], text=True).strip()
+              notes = f"### Changes\n{log}"
+          h = hashlib.sha256()
+          with open(out_zip, "rb") as f:
+              for chunk in iter(lambda: f.read(65536), b""):
+                  h.update(chunk)
+          sha = h.hexdigest()
+          sz = os.path.getsize(out_zip)
+          apk_sz = os.path.getsize(apk_path)
+          img_sz = os.path.getsize("out/arch/arm64/boot/Image")
+          dtbo_sz = os.path.getsize("out/arch/arm64/boot/dtbo.img")
+          ksu = os.environ.get("KSU_COMMIT", "548d1dda")
+          uts = os.environ.get("EXPECTED_REL", f"5.15.207-Flow-X-{flow_ver}")
+          apk_dl = f"https://github.com/bagaasadit/Flow-X/releases/download/{flow_ver}/{apk_name}"
+          print(f"## Flow X {flow_ver} (Experimental)\n")
+          print("**Device:** Xiaomi Snapdragon 720G (`miatoll`: `curtana`, `joyeuse`, `excalibur`, `gram`)  ")
+          print("**Tested On:** Redmi Note 9 Pro (`joyeuse`, 6 GB / 64 GB) • Project Infinity-X 4.1 Vanilla (Android 17) + BiTGApps Core  ")
+          print(f"**Kernel Base:** Linux `4.14.357` (UTS `{uts}`) • **Root / Hiding:** BakaSU (`{ksu}`) + SUSFS + NoMount\n")
+          print(notes)
+          print()
+          print("### Root Manager (BakaSU)")
+          print("This experimental kernel ships with **BakaSU** (KernelSU + SUSFS). Install the matching manager APK below to manage root access and modules:")
+          print(f"* **Download BakaSU Manager:** [{apk_name}]({apk_dl})\n")
+          print("### Build Info & Checksum")
+          print("| Item | Value |")
+          print("|---|---|")
+          print(f"| Image / dtbo | {img_sz / 1048576:.2f} MB / {dtbo_sz / 1048576:.2f} MB |")
+          print(f"| Zip (`{os.path.basename(out_zip)}`) | {sz:,} bytes ({sz / 1048576:.2f} MB) |")
+          print(f"| SHA-256 (Kernel Zip) | `{sha}` |")
+          print(f"| Manager APK (`{apk_name}`) | {apk_sz:,} bytes ({apk_sz / 1048576:.2f} MB) |")
+          print(f"| SHA-256 (Manager APK) | `{apk_sha}` |\n")
+          print("### Disclaimer (DYOR)")
+          print("> **Experimental Kernel — Flash at Your Own Risk.**  ")
+          print("> Keep a verified Recovery backup of `Flow-Kernel v1.2.4` and `boot`/`dtbo` images ready before flashing experimental **Flow X** builds.")
+          PY
+          if gh release view "${FLOW_VER}" >/dev/null 2>&1; then
+            gh release upload "${FLOW_VER}" "$OUT" "$APK_PATH" --clobber
+            gh release edit "${FLOW_VER}" \
+              --title "Flow X ${FLOW_VER}" \
+              --notes-file "$RUNNER_TEMP/RELEASE_NOTES.md" \
+              --latest
+          else
+            gh release create "${FLOW_VER}" "$OUT" "$APK_PATH" \
+              --target "${{ github.sha }}" \
+              --title "Flow X ${FLOW_VER}" \
+              --notes-file "$RUNNER_TEMP/RELEASE_NOTES.md" \
+              --latest
+          fi
+          gh release view "${FLOW_VER}" --json tagName,name,url,assets \
+            -q '.tagName + " | " + .name + " | " + .url + " | " + (.assets | map(.name + " " + (.size|tostring) + "B") | join(", "))'
+
