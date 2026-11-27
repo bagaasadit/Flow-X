@@ -580,7 +580,7 @@ jobs:
           print(f"| Manager APK (`{apk_name}`) | {apk_sz:,} bytes ({apk_sz / 1048576:.2f} MB) |")
           print(f"| SHA-256 (Manager APK) | `{apk_sha}` |\n")
           print("### Module Compatibility & Disclaimer")
-          print("> **Do NOT stack third-party kernel/system tuning modules** (e.g., Encore Tweaks, ANU, Enchanted Deep Sleep) on top of Flow X.  ")
+          print("> **Do NOT stack third-party kernel/system tuning modules or tweak scripts** on top of Flow X.  ")
           print("> Keep verified Recovery backups of your `boot` and `dtbo` images before flashing. Flash at your own risk.")
           PY
           if gh release view "${FLOW_VER}" >/dev/null 2>&1; then

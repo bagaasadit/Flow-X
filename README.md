@@ -59,7 +59,7 @@ Every subsystem change in **Flow X** is validated using controlled same-boot A/B
 3. Flash `Flow-X-<version>-miatoll-BakaSU.zip` and reboot.
 
 > **Module Compatibility Notice:**
-> **Do NOT stack third-party kernel or system tuning modules** (such as Encore Tweaks, Acceleration N' Utility / ANU, Enchanted Deep Sleep, or similar all-in-one tweak packs) on top of Flow X. Overriding validated scheduler, memory, or thermal parameters frequently causes lockscreen freezes, excessive heat, or battery drain.
+> **Do NOT stack third-party kernel or system tuning modules** (scheduler, CPU/GPU, memory, or sleep tweak scripts and all-in-one tweak packs) on top of Flow X. Overriding validated scheduler, memory, or thermal parameters frequently causes lockscreen freezes, excessive heat, or battery drain.
 
 ---
 
