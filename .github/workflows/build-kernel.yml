@@ -1,8 +1,6 @@
-# Flow X CI — miatoll (SM7125 / atoll), arm64, Experimental
+# Flow X CI — miatoll (SM7125 / atoll), arm64
 #
-# Completely separate from stable Flow-Kernel (bagaasadit/Flow-Kernel).
-# Runs ONLY on manual workflow_dispatch so experimental commits never trigger
-# unwanted multi-hour builds until explicitly launched.
+# Runs on manual workflow_dispatch for controlled, reproducible builds.
 name: Flow X CI
 
 on:
@@ -36,7 +34,7 @@ env:
 
 jobs:
   build:
-    name: Build Flow X (miatoll, arm64, BakaSU-SUSFS, Experimental)
+    name: Build Flow X (miatoll, arm64, BakaSU-SUSFS)
     runs-on: ubuntu-24.04
     # LTO + Polly on a 4 vCPU runner is slow; 6h is the GitHub maximum
     timeout-minutes: 360
@@ -564,14 +562,14 @@ jobs:
           ksu = os.environ.get("KSU_COMMIT", "548d1dda")
           uts = os.environ.get("EXPECTED_REL", f"5.15.207-Flow-X-{flow_ver}")
           apk_dl = f"https://github.com/bagaasadit/Flow-X/releases/download/{flow_ver}/{apk_name}"
-          print(f"## Flow X {flow_ver} (Experimental)\n")
+          print(f"## Flow X {flow_ver}\n")
           print("**Device:** Xiaomi Snapdragon 720G (`miatoll`: `curtana`, `joyeuse`, `excalibur`, `gram`)  ")
           print("**Tested On:** Redmi Note 9 Pro (`joyeuse`, 6 GB / 64 GB) • Project Infinity-X 4.1 Vanilla (Android 17) + BiTGApps Core  ")
           print(f"**Kernel Base:** Linux `4.14.357` (UTS `{uts}`) • **Root / Hiding:** BakaSU (`{ksu}`) + SUSFS + NoMount\n")
           print(notes)
           print()
           print("### Root Manager (BakaSU)")
-          print("This experimental kernel ships with **BakaSU** (KernelSU + SUSFS). Install the matching manager APK below to manage root access and modules:")
+          print("Flow X ships with **BakaSU** (KernelSU + SUSFS). Install the matching manager APK below to manage root access and modules:")
           print(f"* **Download BakaSU Manager:** [{apk_name}]({apk_dl})\n")
           print("### Build Info & Checksum")
           print("| Item | Value |")
@@ -581,9 +579,9 @@ jobs:
           print(f"| SHA-256 (Kernel Zip) | `{sha}` |")
           print(f"| Manager APK (`{apk_name}`) | {apk_sz:,} bytes ({apk_sz / 1048576:.2f} MB) |")
           print(f"| SHA-256 (Manager APK) | `{apk_sha}` |\n")
-          print("### Disclaimer (DYOR)")
-          print("> **Experimental Kernel — Flash at Your Own Risk.**  ")
-          print("> Keep a verified Recovery backup of `Flow-Kernel v1.2.4` and `boot`/`dtbo` images ready before flashing experimental **Flow X** builds.")
+          print("### Module Compatibility & Disclaimer")
+          print("> **Do NOT stack third-party kernel/system tuning modules** (e.g., Encore Tweaks, ANU, Enchanted Deep Sleep) on top of Flow X.  ")
+          print("> Keep verified Recovery backups of your `boot` and `dtbo` images before flashing. Flash at your own risk.")
           PY
           if gh release view "${FLOW_VER}" >/dev/null 2>&1; then
             gh release upload "${FLOW_VER}" "$OUT" "$APK_PATH" --clobber

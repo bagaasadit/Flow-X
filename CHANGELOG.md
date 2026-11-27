@@ -17,7 +17,7 @@
 ### Added & Locked (All Verified Winners from Stages 1–4)
 - **Stage 1 (Arch & Stripping):** Hardware ARMv8.2 LSE atomics (`CONFIG_ARM64_LSE_ATOMICS=y`, ThinLTO-safe `DISABLE_LTO` on `atomic_ll_sc.o`) + hotpath overhead stripping (`AUDITSYSCALL=n`, `HARDEN_BRANCH_PREDICTOR=n`, `SLAB_FREELIST_HARDENED=n`, `SLAB_FREELIST_RANDOM=n`, `HARDENED_USERCOPY=n`, `BUG_ON_DATA_CORRUPTION=n`, `DEBUG_LIST=n`, `DEBUG_KERNEL=n`) while retaining `AUDIT=y`, `FTRACE=y`, and `BPF_EVENTS=y`.
 - **Stage 2 (Scheduler & Hardware Telemetry):** Fixed `BORE 5.1.0` scheduler (`CONFIG_SCHED_BORE=y`, 5 port fixes, runtime `0/1` toggle via `/proc/sys/kernel/sched_bore`) + persistent read-only `/sys/class/kgsl/kgsl-3d0/flowx_arc` sysfs attribute.
-- **Stage 3 (Brutal MM & True Hot-Resume):** Pure-kernel `6 GiB` LZ4 `zram0` floor (`>= 5 GiB` RAM), unlocked MGLRU `vm_swappiness = 100` (`0..200`), `lru_gen/min_ttl_ms = 2000`, `watermark_scale_factor = 200` (`~112 MiB` async `kswapd` runway with lean `~31 MiB` `WMARK_LOW`), faster budgeted proactive compaction (`base 1000ms`, `8192/32768` scan budget, `proactiveness = 40`), and `vfs_cache_pressure = 60`.
+- **Stage 3 (Memory & Multitasking Architecture):** Pure-kernel `6 GiB` LZ4 `zram0` floor (`>= 5 GiB` RAM), unlocked MGLRU `vm_swappiness = 100` (`0..200`), `lru_gen/min_ttl_ms = 2000`, `watermark_scale_factor = 200` (`~112 MiB` async `kswapd` runway with lean `~31 MiB` `WMARK_LOW`), faster budgeted proactive compaction (`base 1000ms`, `8192/32768` scan budget, `proactiveness = 40`), and `vfs_cache_pressure = 60`.
 - **Stage 4 (GPU & DDR 2133 MHz):** Locked stock-safe `750 MHz` Adreno 618 clock + unlocked **`DDR 2133 MHz` (`bus-max = 12`, `8137 MiB/s`)** on `750 / 650 MHz` (`speed-bin 159`).
 
 ### Changed / Removed
@@ -41,7 +41,7 @@
 
 ## [v0.4.0-s3] - 2026-11-25
 ### Added
-- **Stage 3 (Brutal MM & True Hot-Resume Track):**
+- **Stage 3 (Memory & Multitasking Architecture):**
   - **6 GiB `zram0` floor (`drivers/block/zram/zram_drv.c`):** Raised pure-kernel `zram0` `disksize_store` floor from `4 GiB` to `6 GiB` on `>= 5 GiB` RAM `miatoll` devices (zero physical RAM consumed until swapped; eliminates `>86%` zRAM saturation & early `lmkd` swap-low kills while leaving `4 GiB` devices untouched).
   - **Unlocked MGLRU `vm_swappiness = 100` (`mm/vmscan.c`, `kernel/sysctl.c`):** Raised `vm_swappiness` default from `60` to `100` and lifted `MAX_VM_SWAPPINESS` clamp from `60` to `200`, allowing vendor post-boot (`100`) and full `0..200` runtime MGLRU A/B tuning while protecting active `.odex`/`.so` file pages from excessive refaults.
   - **MGLRU working-set TTL (`mm/vmscan.c`):** Increased `lru_gen_min_ttl_ms` default from `1000` to `2000` ms (with `sc->priority <= DEF_PRIORITY - 3` burst bypass preserved and runtime-tunable via `/sys/kernel/mm/lru_gen/min_ttl_ms`).
@@ -70,7 +70,7 @@
   - Added Flow X Stage 1 config guardrails in `.github/workflows/build-kernel.yml`.
 
 ### Changed
-- Stripped hot-path syscall/allocator/debug overhead for maximal experimental throughput while preserving `CONFIG_AUDIT=y` (SELinux AVC), `CONFIG_FTRACE=y`, and `CONFIG_BPF_EVENTS=y`:
+- Stripped hot-path syscall/allocator/debug overhead for sustained hot-path throughput while preserving `CONFIG_AUDIT=y` (SELinux AVC), `CONFIG_FTRACE=y`, and `CONFIG_BPF_EVENTS=y`:
   - `# CONFIG_AUDITSYSCALL is not set`
   - `# CONFIG_HARDEN_BRANCH_PREDICTOR is not set` (also disables Spectre BHB mitigation)
   - `# CONFIG_SLAB_FREELIST_RANDOM is not set` & `# CONFIG_SLAB_FREELIST_HARDENED is not set`
@@ -83,4 +83,4 @@
 ### Added
 - Bootstrapped **Flow X** as a completely isolated repository (`bagaasadit/Flow-X`) forked from verified **Flow-Kernel v1.2.4** (`32ed9386`).
 - Rebranded kernel UTS (`-Flow-X-v0.1.0`), AnyKernel3 banner/installer/backup paths (`/sdcard/backup_*_pre_flowx.img`), `build.sh` output zip (`Flow-X-*.zip`), and `Flow X CI` (`workflow_dispatch` only).
-- Relaxed CI scheduler config guardrails for `CONFIG_SCHED_BORE` and `CONFIG_SCHED_CASS` so Flow X experiments can enable and benchmark them cleanly.
+- Relaxed CI scheduler config guardrails for `CONFIG_SCHED_BORE` and `CONFIG_SCHED_CASS` so Flow X can enable and validate them cleanly.
