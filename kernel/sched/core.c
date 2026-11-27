@@ -765,7 +765,8 @@ static void set_load_weight(struct task_struct *p)
 	}
 
 #ifdef CONFIG_SCHED_BORE
-	if (likely(sched_bore) && fair_policy(p->policy))
+	if (likely(sched_bore) && fair_policy(p->policy) &&
+	    !((p->flags & PF_KSWAPD) && READ_ONCE(sched_bore_exempt_kswapd)))
 		prio = min(39, prio + (int)p->se.burst_score);
 #endif
 	load->weight = scale_load(sched_prio_to_weight[prio]);

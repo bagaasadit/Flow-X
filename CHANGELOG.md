@@ -1,5 +1,10 @@
 # Changelog
 
+## [v1.0.2] - 2026-11-27
+### Changed
+- **Scheduler (`BORE 5.1.0`)**: Exempt `PF_KSWAPD` (`kswapd0`) from BORE burst penalty (`update_burst_score()`, `enqueue_task_fair()`, and `set_load_weight()`) so background page reclaim retains its configured scheduling priority instead of being pushed down to `nice +19`.
+- **Runtime A/B Toggle**: Added `/proc/sys/kernel/sched_bore_exempt_kswapd` (`0/1`, default `1`) to allow same-boot A/B validation of `kswapd` BORE exemption.
+
 ## [v1.0.1] - 2026-11-27
 ### Fixed
 - **Order-4 Proactive Compaction (`mm/compaction.c`):** Fixed `PROACTIVE_COMPACT_ORDER` from `pageblock_order` (`order-10` / `4 MiB` on 4K ARM64) down to **`4`** (`64 KiB`), with `sysctl_compaction_proactiveness = 25`, `COMPACT_PROACTIVE_BASE_MS = 2000U`, and scan budgets `4096 / 16384`. Keeps Buddy `order-3` (`32 KiB`) free blocks available during fast-scrolling and Quickstep Recents transitions without wasting `kcompactd` cycles chasing unreachable `4 MiB` blocks.

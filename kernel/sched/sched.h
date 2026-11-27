@@ -1909,6 +1909,7 @@ extern void init_sched_fair_class(void);
 extern void reweight_task(struct task_struct *p, int prio);
 #ifdef CONFIG_SCHED_BORE
 extern uint sched_bore;
+extern uint sched_bore_exempt_kswapd;
 #endif
 
 extern void resched_curr(struct rq *rq);

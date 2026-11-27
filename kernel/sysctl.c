@@ -122,6 +122,7 @@ static int sixty = 60;
 
 #ifdef CONFIG_SCHED_BORE
 extern uint sched_bore;
+extern uint sched_bore_exempt_kswapd;
 extern uint sched_burst_smoothness_long;
 extern uint sched_burst_smoothness_short;
 extern uint sched_burst_fork_atavistic;
@@ -1473,6 +1474,15 @@ static struct ctl_table kern_table[] = {
 	{
 		.procname	= "sched_bore",
 		.data		= &sched_bore,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler = proc_douintvec_minmax,
+		.extra1		= &zero,
+		.extra2		= &one,
+	},
+	{
+		.procname	= "sched_bore_exempt_kswapd",
+		.data		= &sched_bore_exempt_kswapd,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler = proc_douintvec_minmax,

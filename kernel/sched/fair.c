@@ -173,6 +173,7 @@ static inline struct task_struct *task_of(struct sched_entity *se)
 
 #ifdef CONFIG_SCHED_BORE
 uint __read_mostly sched_bore                   = 1;
+uint __read_mostly sched_bore_exempt_kswapd     = 1;
 uint __read_mostly sched_burst_smoothness_long  = 1;
 uint __read_mostly sched_burst_smoothness_short = 0;
 uint __read_mostly sched_burst_fork_atavistic   = 2;
@@ -204,6 +205,12 @@ static inline u64 scale_slice(u64 delta, struct sched_entity *se) {
 	return mul_u64_u32_shr(delta, sched_prio_to_wmult[se->burst_score], 22);
 }
 
+static inline bool bore_task_exempt(const struct task_struct *p)
+{
+	return unlikely(p->flags & PF_KSWAPD) &&
+	       READ_ONCE(sched_bore_exempt_kswapd);
+}
+
 static void update_burst_score(struct sched_entity *se) {
 	struct task_struct *p;
 	u8 prio, prev_prio, new_prio;
@@ -216,7 +223,8 @@ static void update_burst_score(struct sched_entity *se) {
 	prio = p->static_prio - MAX_RT_PRIO;
 	prev_prio = min(39, prio + se->burst_score);
 
-	se->burst_score = likely(sched_bore) ? (se->burst_penalty >> 2) : 0;
+	se->burst_score = (likely(sched_bore) && !bore_task_exempt(p)) ?
+			  (se->burst_penalty >> 2) : 0;
 
 	new_prio = min(39, prio + se->burst_score);
 	if (new_prio != prev_prio)
@@ -5448,7 +5456,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		cpufreq_update_util(rq, SCHED_CPUFREQ_IOWAIT);
 
 #ifdef CONFIG_SCHED_BORE
-	if (unlikely(!sched_bore && se->burst_score))
+	if (unlikely((!sched_bore || bore_task_exempt(p)) && se->burst_score))
 		update_burst_score(se);
 #endif // CONFIG_SCHED_BORE
 
