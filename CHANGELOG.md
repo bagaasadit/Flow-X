@@ -1,5 +1,13 @@
 # Changelog
 
+## [v1.0.1] - 2026-11-27
+### Fixed
+- **Order-4 Proactive Compaction (`mm/compaction.c`):** Fixed `PROACTIVE_COMPACT_ORDER` from `pageblock_order` (`order-10` / `4 MiB` on 4K ARM64) down to **`4`** (`64 KiB`), with `sysctl_compaction_proactiveness = 25`, `COMPACT_PROACTIVE_BASE_MS = 2000U`, and scan budgets `4096 / 16384`. Keeps Buddy `order-3` (`32 KiB`) free blocks available during fast-scrolling and Quickstep Recents transitions without wasting `kcompactd` cycles chasing unreachable `4 MiB` blocks.
+
+### Preserved (Validated on Live Telemetry)
+- Kept **`sched_util_clamp_min_rt_default = 384`**, **`watermark_scale_factor = 200`**, and **`vm_swappiness = 100`** untouched after live A/B/C testing confirmed lowering them regressed `SurfaceFlinger`/Launcher smoothness and triggered direct reclaim stalls.
+- Kept all `v1.0.0` winners (`ARMv8.2 LSE`, `BORE 5.1.0`, `6 GiB zram0`, `MGLRU`, `Adreno 618 750 MHz + DDR 2133 MHz`).
+
 ## [v1.0.0] - 2026-11-25
 ### Added & Locked (All Verified Winners from Stages 1–4)
 - **Stage 1 (Arch & Stripping):** Hardware ARMv8.2 LSE atomics (`CONFIG_ARM64_LSE_ATOMICS=y`, ThinLTO-safe `DISABLE_LTO` on `atomic_ll_sc.o`) + hotpath overhead stripping (`AUDITSYSCALL=n`, `HARDEN_BRANCH_PREDICTOR=n`, `SLAB_FREELIST_HARDENED=n`, `SLAB_FREELIST_RANDOM=n`, `HARDENED_USERCOPY=n`, `BUG_ON_DATA_CORRUPTION=n`, `DEBUG_LIST=n`, `DEBUG_KERNEL=n`) while retaining `AUDIT=y`, `FTRACE=y`, and `BPF_EVENTS=y`.

@@ -1310,11 +1310,11 @@ static isolate_migrate_t isolate_migratepages(struct zone *zone,
 	return cc->nr_migratepages ? ISOLATE_SUCCESS : ISOLATE_NONE;
 }
 
-#define PROACTIVE_COMPACT_ORDER		pageblock_order
-#define COMPACT_PROACTIVE_BASE_MS	1000U
+#define PROACTIVE_COMPACT_ORDER		4
+#define COMPACT_PROACTIVE_BASE_MS	2000U
 #define COMPACT_PROACTIVE_MAX_MS	32000U
-#define PROACTIVE_MAX_MIGRATE_SCAN	8192UL
-#define PROACTIVE_MAX_FREE_SCAN		32768UL
+#define PROACTIVE_MAX_MIGRATE_SCAN	4096UL
+#define PROACTIVE_MAX_FREE_SCAN		16384UL
 
 static unsigned int fragmentation_score_zone(struct zone *zone);
 
@@ -1957,11 +1957,12 @@ void compaction_unregister_node(struct node *node)
 
 /*
  * Gentle budgeted proactive compaction for mobile multitasking:
- * drives node fragmentation below wmark_low so Buddy pageblock_order (order-3)
- * movable blocks stay available under multitasking bursts without blocking
- * direct reclaim, inflating PSI memstall, or waking Deep Sleep (0 wakeups).
+ * target order-4 (64 KiB) blocks instead of pageblock_order (order-10 / 4 MiB)
+ * so Buddy order-3 (32 KiB) movable blocks stay populated under scroll/launch
+ * bursts without burning kcompactd scans, blocking direct reclaim, inflating
+ * PSI memstall, or waking Deep Sleep (0 wakeups).
  */
-int sysctl_compaction_proactiveness = 40;
+int sysctl_compaction_proactiveness = 25;
 
 static unsigned int fragmentation_score_zone(struct zone *zone)
 {
