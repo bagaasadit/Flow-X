@@ -4,7 +4,7 @@
 ### AnyKernel setup
 # global properties
 properties() { '
-kernel.string=Flow X v1.0.3 by bagaasadit
+kernel.string=Flow X v1.0.4 by bagaasadit
 do.devicecheck=1
 do.modules=0
 do.systemless=1
@@ -32,7 +32,7 @@ PATCH_VBMETA_FLAG=auto;
 
 ui_print " ";
 ui_print "  Project    : Flow X";
-ui_print "  Version    : v1.0.3";
+ui_print "  Version    : v1.0.4";
 ui_print "  Device     : miatoll (A11 - A17)";
 ui_print "  Kernel     : Linux 4.14.357 (5.15.207)";
 ui_print "  Root       : BakaSU + SUSFS v2.4";

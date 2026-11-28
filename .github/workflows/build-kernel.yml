@@ -318,8 +318,9 @@ jobs:
             fi
           done
 
-          # Flow X v1.0.3: verify hardware LSE atomics, BORE, and restored hardening/audit symbols
+          # Flow X v1.0.4: verify hardware LSE atomics, BORE, SMP2P sleepstate, and hardening/audit symbols
           for sym in CONFIG_ARM64_LSE_ATOMICS CONFIG_SCHED_BORE \
+                     CONFIG_QCOM_SMP2P_SLEEPSTATE \
                      CONFIG_AUDIT CONFIG_AUDITSYSCALL \
                      CONFIG_FTRACE CONFIG_BPF_EVENTS \
                      CONFIG_SLAB_FREELIST_HARDENED CONFIG_SLAB_FREELIST_RANDOM \
@@ -328,10 +329,17 @@ jobs:
             if grep -qx "$sym=y" out/.config; then
               echo "  ok   $sym=y"
             else
-              echo "::error::$sym must stay enabled in Flow X v1.0.3"
+              echo "::error::$sym must stay enabled in Flow X v1.0.4"
               fail=1
             fi
           done
+
+          if grep -qE '^[[:space:]]+qcom_smem_state_update_bits\(smem_state, AWAKE_BIT, 0\);' kernel/power/suspend.c; then
+            echo "  ok   suspend.c clears AWAKE_BIT before enter_state"
+          else
+            echo "::error::kernel/power/suspend.c must clear AWAKE_BIT before enter_state"
+            fail=1
+          fi
 
           # Every inline hook site must still be wired. A dropped hook does
           # not fail to build - it fails silently at boot, which is how the

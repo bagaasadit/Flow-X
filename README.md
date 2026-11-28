@@ -14,11 +14,11 @@ Precision-tuned Linux `4.14.357` kernel (`5.15.207` UTS) for Xiaomi Snapdragon 7
 | **Kernel Base** | Linux `4.14.357` (`5.15.207` UTS) |
 | **Root & Hiding** | **BakaSU** (`KernelSU` + `SUSFS` + `NoMount`) |
 
-* **BakaSU Manager APK:** [`BakaSU_v4.2.0-rc3_35252-arm64-v8a-release.apk`](https://github.com/bagaasadit/Flow-X/releases/download/v1.0.3/BakaSU_v4.2.0-rc3_35252-arm64-v8a-release.apk)
+* **BakaSU Manager APK:** [`BakaSU_v4.2.0-rc3_35252-arm64-v8a-release.apk`](https://github.com/bagaasadit/Flow-X/releases/download/v1.0.4/BakaSU_v4.2.0-rc3_35252-arm64-v8a-release.apk)
 
 ---
 
-## Architecture & Engineering Highlights (`v1.0.3`)
+## Architecture & Engineering Highlights (`v1.0.4`)
 
 1. **ARMv8.2 LSE Atomics & Hardened Runtime Integrity**
    * `CONFIG_ARM64_LSE_ATOMICS=y` with ThinLTO-safe `DISABLE_LTO` on `atomic_ll_sc.o`.
@@ -34,7 +34,8 @@ Precision-tuned Linux `4.14.357` kernel (`5.15.207` UTS) for Xiaomi Snapdragon 7
    * Fixes the `msm-adreno-tz` `MIN_BUSY` idle-latch bug (`>=50 ms` `<2%` load steps cleanly back down to `267 MHz`) and removes `qcom,no-nap` (`force_no_nap = 0`) so the GPU rests at low clock/NAP state between UI frames.
    * Sets `750 MHz` default bus vote to `11` (`DDR 1804 MHz`) while keeping `bus-max = 12` (`DDR 2133 MHz`, `8137 MiB/s`) unlocked on demand for heavy gaming loads.
    * Persistent read-only RPMh voltage-level telemetry exposed at `/sys/class/kgsl/kgsl-3d0/flowx_arc`.
-5. **Deep Sleep `s2idle` Guard (`smb1398`)**
+5. **Deep Sleep `s2idle` Guards (`smp2p_sleepstate` & `smb1398`)**
+   * Restores `AWAKE_BIT` AP-sleep notification to ADSP/SEE in `pm_suspend()` (suppressing non-wakeup ADSP sensor streams during `s2idle` while preserving wakeup sensors like `pickup` and proximity).
    * Guards `smb1398_resume()` and `charge_pump_master` uevent emissions when USB/switcher is inactive, preventing spurious wake storms after unplugging fast chargers.
 
 ---

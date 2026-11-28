@@ -13,6 +13,7 @@
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
+#include <linux/err.h>
 #include <linux/init.h>
 #include <linux/console.h>
 #include <linux/cpu.h>
@@ -662,9 +663,11 @@ int pm_suspend(suspend_state_t state)
 
 	pm_suspend_marker("entry");
 	pr_debug("suspend entry (%s)\n", mem_sleep_labels[state]);
-	//qcom_smem_state_update_bits(smem_state, AWAKE_BIT, 0);
+	if (!IS_ERR_OR_NULL(smem_state))
+		qcom_smem_state_update_bits(smem_state, AWAKE_BIT, 0);
 	error = enter_state(state);
-	qcom_smem_state_update_bits(smem_state, AWAKE_BIT, AWAKE_BIT);
+	if (!IS_ERR_OR_NULL(smem_state))
+		qcom_smem_state_update_bits(smem_state, AWAKE_BIT, AWAKE_BIT);
 	if (error) {
 		suspend_stats.fail++;
 		dpm_save_failed_errno(error);

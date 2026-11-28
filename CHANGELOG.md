@@ -1,5 +1,13 @@
 # Changelog
 
+## [v1.0.4] - 2026-11-28
+### Fixed
+- **Deep Sleep `s2idle` ADSP Non-Wakeup Sensor Wake Storm (`kernel/power/suspend.c`):**
+  - Restored `qcom_smem_state_update_bits(smem_state, AWAKE_BIT, 0)` before `enter_state()` (guarded with `!IS_ERR_OR_NULL(smem_state)` on both suspend entry and resume exit), aligning with Qualcomm KBA-180725024109 and `LineageOS sm6250`.
+  - Fixes an inherited upstream merge mistake where `AWAKE_BIT` remained permanently asserted `1`, causing ADSP/SEE to keep streaming non-wakeup sensors (`lsm6ds3c` accelerometer/gyroscope at `~10.5 Hz`) over `IRQ 500 (glink-native)` during `s2idle` and collapsing deep sleep from `~95%` down to `23–31%`.
+- **CI Guard (`.github/workflows/build-kernel.yml`):**
+  - Added config assertion for `CONFIG_QCOM_SMP2P_SLEEPSTATE=y` and source guard ensuring `AWAKE_BIT` clear remains active in `kernel/power/suspend.c`.
+
 ## [v1.0.3] - 2026-11-28
 ### Fixed
 - **Adreno 618 GPU Power & Idle Residency (`governor_msm_adreno_tz.c`, `atoll.dtsi`):**
