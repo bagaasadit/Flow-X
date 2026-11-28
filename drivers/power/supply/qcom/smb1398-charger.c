@@ -322,6 +322,7 @@ struct smb1398_chip {
 	bool			six_pin_batt;
 	bool			qc3p5_ffc_batt;
 	bool			usb_present;
+	bool			resume_rerun_needed;
 };
 
 static const struct smb_irq smb_irqs[];
@@ -1194,9 +1195,14 @@ static int smb1398_div2_cp_disable_vote_cb(struct votable *votable,
 {
 	struct smb1398_chip *chip = (struct smb1398_chip *)data;
 	int rc = 0;
+	bool prev_switcher_en = chip->switcher_en;
 
-	if (!is_psy_voter_available(chip) || chip->in_suspend)
+	if (!is_psy_voter_available(chip))
 		return -EAGAIN;
+	if (chip->in_suspend) {
+		chip->resume_rerun_needed = true;
+		return -EAGAIN;
+	}
 
 	rc = smb1398_div2_cp_switcher_en(chip, !disable);
 	if (rc < 0) {
@@ -1209,7 +1215,8 @@ static int smb1398_div2_cp_disable_vote_cb(struct votable *votable,
 		vote(chip->div2_cp_slave_disable_votable, MAIN_DISABLE_VOTER,
 				!!disable ? true : false, 0);
 
-	if (chip->div2_cp_master_psy)
+	if (chip->div2_cp_master_psy &&
+	    (READ_ONCE(chip->usb_present) || chip->switcher_en || prev_switcher_en))
 		power_supply_changed(chip->div2_cp_master_psy);
 
 	return 0;
@@ -1263,8 +1270,12 @@ static int smb1398_div2_cp_ilim_vote_cb(struct votable *votable,
 	struct smb1398_chip *chip = (struct smb1398_chip *)data;
 	union power_supply_propval pval = {0};
 	int rc = 0, max_ilim_ua;
-	if (!is_psy_voter_available(chip) || chip->in_suspend)
+	if (!is_psy_voter_available(chip))
 		return -EAGAIN;
+	if (chip->in_suspend) {
+		chip->resume_rerun_needed = true;
+		return -EAGAIN;
+	}
 
 	if (!client)
 		return -EINVAL;
@@ -2497,10 +2508,14 @@ static int smb1398_suspend(struct device *dev)
 static int smb1398_resume(struct device *dev)
 {
 	struct smb1398_chip *chip = dev_get_drvdata(dev);
+	bool need_rerun;
 
 	chip->in_suspend = false;
+	need_rerun = chip->resume_rerun_needed;
+	chip->resume_rerun_needed = false;
 
-	if (chip->div2_cp_role == DIV2_CP_MASTER) {
+	if (chip->div2_cp_role == DIV2_CP_MASTER &&
+	    (need_rerun || READ_ONCE(chip->usb_present) || chip->switcher_en)) {
 		rerun_election(chip->div2_cp_ilim_votable);
 		rerun_election(chip->div2_cp_disable_votable);
 	}

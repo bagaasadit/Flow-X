@@ -367,8 +367,34 @@ static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq)
 	 * busier than MIN_BUSY.
 	 */
 	if ((stats.total_time == 0) ||
-		(priv->bin.total_time < FLOOR) ||
-		(unsigned int) priv->bin.busy_time < MIN_BUSY) {
+		(priv->bin.total_time < FLOOR)) {
+		return 0;
+	}
+
+	if ((unsigned int) priv->bin.busy_time < MIN_BUSY) {
+		/*
+		 * Avoid latching at an elevated OPP (e.g. 750 MHz) during
+		 * ultra-light idle/2D refreshes (<1 ms busy across >=50 ms,
+		 * <2% load). Heavy scrolling and 3D games far exceed MIN_BUSY
+		 * and stay on the stock TZ DCVS path untouched.
+		 */
+		if (priv->bin.total_time >= CEILING &&
+		    devfreq->profile->max_state > 0) {
+			unsigned long min_freq =
+				devfreq->profile->freq_table[
+					devfreq->profile->max_state - 1];
+
+			priv->bin.total_time = 0;
+			priv->bin.busy_time = 0;
+			if (stats.current_frequency > min_freq) {
+				unsigned int reset_data[2] = {0, 0};
+
+				__secure_tz_reset_entry2(reset_data,
+						sizeof(reset_data),
+						priv->is_64);
+				*freq = min_freq;
+			}
+		}
 		return 0;
 	}
 

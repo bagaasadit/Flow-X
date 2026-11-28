@@ -3416,6 +3416,7 @@
 	/delete-property/ qcom,msm-bus,vectors-KBps;
 	/delete-property/ qcom,initial-pwrlevel;
 	/delete-property/ qcom,ca-target-pwrlevel;
+	/delete-property/ qcom,no-nap;
 
 	qcom,msm-bus,num-cases = <13>;
 	qcom,msm-bus,vectors-KBps =
@@ -3815,11 +3816,11 @@
 			qcom,initial-pwrlevel = <5>;
 			qcom,ca-target-pwrlevel = <4>;
 
-			/* TURBO (stock 750 MHz + DDR 2133 MHz bus-max=12) */
+			/* TURBO (stock 750 MHz, default DDR 1804 MHz with on-demand DDR 2133 MHz bus-max=12) */
 			qcom,gpu-pwrlevel@0 {
 				reg = <0>;
 				qcom,gpu-freq = <750000000>;
-				qcom,bus-freq = <12>;
+				qcom,bus-freq = <11>;
 				qcom,bus-min = <10>;
 				qcom,bus-max = <12>;
 			};

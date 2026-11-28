@@ -1,5 +1,20 @@
 # Changelog
 
+## [v1.0.3] - 2026-11-28
+### Fixed
+- **Adreno 618 GPU Power & Idle Residency (`governor_msm_adreno_tz.c`, `atoll.dtsi`):**
+  - Fixed the `msm-adreno-tz` `MIN_BUSY` idle-latch bug in `tz_get_target_freq()` so ultra-light `<2%` (`<1 ms` busy across `>=50 ms`) screen-on periods cleanly reset TZ DCVS and drop back to `267 MHz` while leaving scrolling and heavy 3D loads untouched.
+  - Deleted `qcom,no-nap` from `&msm_gpu` in `atoll.dtsi` (`force_no_nap=0` at boot) so KGSL enters `NAP` power collapse cleanly between light frames.
+  - Lowered `750 MHz` (`TURBO`) default `qcom,bus-freq` from `12` (`DDR 2133 MHz`) to `11` (`DDR 1804 MHz`) while preserving `qcom,bus-max = <12>` so `gpubw_mon` unlocks `DDR 2133 MHz` strictly on demand under heavy gaming bandwidth demand.
+- **Deep Sleep `s2idle` Charge-Pump Resume Loop (`smb1398-charger.c`):**
+  - Tracked deferred `in_suspend` votes via `resume_rerun_needed` and guarded `smb1398_resume()` and `power_supply_changed(div2_cp_master_psy)` so `charge_pump_master` no longer spams vote reruns and `power_supply` uevents on brief `s2idle` wakeups when no USB charger or switcher is active.
+- **Banking & Allocator Security Restoration (`miatoll_defconfig`):**
+  - Restored `CONFIG_AUDITSYSCALL=y`, `CONFIG_SLAB_FREELIST_HARDENED=y`, `CONFIG_SLAB_FREELIST_RANDOM=y`, `CONFIG_HARDENED_USERCOPY=y`, `CONFIG_HARDEN_BRANCH_PREDICTOR=y`, `CONFIG_BUG_ON_DATA_CORRUPTION=y` (selecting `DEBUG_LIST`), and `CONFIG_DEBUG_KERNEL=y` while keeping `CONFIG_ARM64_LSE_ATOMICS=y` active.
+
+### Changed
+- **Scheduler Defaults (`kernel/sched/fair.c`, `kernel/sched/autogroup.c`):**
+  - Set `sched_bore = 0` (`CONFIG_SCHED_BORE=y` retained for runtime toggle), `sysctl_sched_autogroup_enabled = 0`, and WALT migration thresholds to **`95% / 85%`** (`1077 / 1204`) after A/B benchmarks showed higher multi-core throughput and lower Gold/idle residency with zero UI scroll regression (keeping `sched_util_clamp_min_rt_default = 384` intact).
+
 ## [v1.0.2] - 2026-11-27
 ### Changed
 - **Scheduler (`BORE 5.1.0`)**: Exempt `PF_KSWAPD` (`kswapd0`) from BORE burst penalty (`update_burst_score()`, `enqueue_task_fair()`, and `set_load_weight()`) so background page reclaim retains its configured scheduling priority instead of being pushed down to `nice +19`.
